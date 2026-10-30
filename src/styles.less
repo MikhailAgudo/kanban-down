@@ -715,6 +715,13 @@ button.kanban-plugin__new-item-button {
   background: var(--background-primary);
 }
 
+@supports (content-visibility: auto) and (contain-intrinsic-block-size: auto 3rem) {
+  .kanban-plugin__item > .kanban-plugin__item-content-wrapper {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 3rem;
+  }
+}
+
 .kanban-plugin__item-title-wrapper {
   background: var(--background-primary);
   display: flex;

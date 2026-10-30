@@ -1,5 +1,5 @@
 import update from 'immutability-helper';
-import { App, TFile, moment } from 'obsidian';
+import { App, TFile, getLinkpath, moment } from 'obsidian';
 import { useEffect, useState } from 'preact/compat';
 
 import { KanbanView } from './KanbanView';
@@ -24,6 +24,7 @@ export class StateManager {
   app: App;
   state: Board;
   file: TFile;
+  linkedFilePaths: Set<string> = new Set();
   boardFileReadVersion = 0;
 
   parser: BaseFormat;
@@ -63,7 +64,7 @@ export class StateManager {
     if (shouldParseData) {
       await this.newBoard(view, data);
     } else {
-      await view.prerender(this.state);
+      view.prepareBoardView();
     }
 
     view.populateViewState(this.state.data.settings);
@@ -90,11 +91,67 @@ export class StateManager {
   async newBoard(view: KanbanView, md: string) {
     try {
       const board = this.getParsedBoard(md);
-      await view.prerender(board);
+      view.prepareBoardView();
       this.setState(board, false);
+      this.refreshLinkedFilePaths();
     } catch (e) {
       this.setError(e);
     }
+  }
+
+  private collectLinkedFilePaths() {
+    const paths = new Set<string>();
+    const metadataCache = this.app.metadataCache;
+    const fileCache = metadataCache.getFileCache(this.file);
+
+    for (const link of [...(fileCache?.links ?? []), ...(fileCache?.embeds ?? [])]) {
+      const target = metadataCache.getFirstLinkpathDest(getLinkpath(link.link), this.file.path);
+      if (target) paths.add(target.path);
+    }
+
+    const addItemFile = (item: Item) => {
+      const { file, fileAccessor } = item.data.metadata;
+      if (file) paths.add(file.path);
+
+      if (fileAccessor) {
+        const target = metadataCache.getFirstLinkpathDest(
+          getLinkpath(fileAccessor.target),
+          this.file.path
+        );
+        if (target) paths.add(target.path);
+      }
+    };
+
+    this.state?.children.forEach((lane) => lane.children.forEach(addItemFile));
+    this.state?.data.archive.forEach(addItemFile);
+
+    return paths;
+  }
+
+  refreshLinkedFilePaths() {
+    this.linkedFilePaths = this.collectLinkedFilePaths();
+  }
+
+  isMetadataChangeRelevant(filePath: string, previousPath?: string) {
+    // Keep the previous resolution for renames and alias changes, then check current unresolved links.
+    if (
+      this.linkedFilePaths.has(filePath) ||
+      (previousPath && this.linkedFilePaths.has(previousPath))
+    ) {
+      return true;
+    }
+
+    const fileCache = this.app.metadataCache.getFileCache(this.file);
+    if (!fileCache) return true;
+
+    const links = [...(fileCache.links ?? []), ...(fileCache.embeds ?? [])];
+    return links.some((link) => {
+      const target = this.app.metadataCache.getFirstLinkpathDest(
+        getLinkpath(link.link),
+        this.file.path
+      );
+      return target?.path === filePath;
+    });
   }
 
   saveToDisk() {
@@ -184,6 +241,8 @@ export class StateManager {
     try {
       const oldSettings = this.state?.data.settings;
       const newState = typeof state === 'function' ? state(this.state) : state;
+      if (newState === this.state && !shouldSave) return;
+
       const newSettings = newState?.data.settings;
 
       if (oldSettings && newSettings && shouldRefreshBoard(oldSettings, newSettings)) {
@@ -406,13 +465,18 @@ export class StateManager {
       if (readVersion !== this.boardFileReadVersion) return;
 
       const view = this.getAView();
-      if (!view || view.data === data) return;
+      if (!view) return;
+      if (view.data === data) {
+        this.refreshLinkedFilePaths();
+        return;
+      }
 
       this.viewSet.forEach((view) => {
         view.data = data;
       });
 
       this.setState(this.getParsedBoard(data), false);
+      this.refreshLinkedFilePaths();
     } catch (e) {
       if (readVersion !== this.boardFileReadVersion) return;
       console.error(e);
@@ -423,6 +487,7 @@ export class StateManager {
   async reparseBoardFromMd() {
     try {
       this.setState(this.getParsedBoard(this.getAView().data), false);
+      this.refreshLinkedFilePaths();
     } catch (e) {
       console.error(e);
       this.setError(e);

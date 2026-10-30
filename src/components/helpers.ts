@@ -361,17 +361,18 @@ export function useSearchValue(
   setDebouncedSearchQuery: Dispatch<StateUpdater<string>>,
   setIsSearching: Dispatch<StateUpdater<boolean>>
 ) {
-  return useMemo<SearchContextProps>(() => {
-    query = query.trim().toLocaleLowerCase();
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const searchBoard = normalizedQuery ? board : null;
 
+  return useMemo<SearchContextProps>(() => {
     const lanes = new Set<Lane>();
     const items = new Set<Item>();
 
-    if (query) {
-      board.children.forEach((lane) => {
+    if (normalizedQuery && searchBoard) {
+      searchBoard.children.forEach((lane) => {
         let laneMatched = false;
         lane.children.forEach((item) => {
-          if (item.data.titleSearch.includes(query)) {
+          if (item.data.titleSearch.includes(normalizedQuery)) {
             laneMatched = true;
             items.add(item);
           }
@@ -383,21 +384,27 @@ export function useSearchValue(
     return {
       lanes,
       items,
-      query,
-      search: (query, immediate) => {
-        if (!query) {
+      query: normalizedQuery,
+      search: (searchQuery, immediate) => {
+        if (!searchQuery) {
           setIsSearching(false);
           setSearchQuery('');
           setDebouncedSearchQuery('');
         }
         setIsSearching(true);
         if (immediate) {
-          setSearchQuery(query);
-          setDebouncedSearchQuery(query);
+          setSearchQuery(searchQuery);
+          setDebouncedSearchQuery(searchQuery);
         } else {
-          setSearchQuery(query);
+          setSearchQuery(searchQuery);
         }
       },
     };
-  }, [board, query, setSearchQuery, setDebouncedSearchQuery]);
+  }, [
+    searchBoard,
+    normalizedQuery,
+    setSearchQuery,
+    setDebouncedSearchQuery,
+    setIsSearching,
+  ]);
 }

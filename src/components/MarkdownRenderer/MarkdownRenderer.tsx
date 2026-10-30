@@ -62,7 +62,8 @@ export class BasicMarkdownRenderer extends Component {
   renderCapability: PromiseCapability;
   observer: ResizeObserver | null = null;
   isVisible: boolean = false;
-  renderPending: boolean = false;
+  renderPending: boolean = true;
+  hasRendered: boolean = false;
   onRender?: (containerEl: HTMLElement) => void;
   mark: Mark;
 
@@ -96,12 +97,7 @@ export class BasicMarkdownRenderer extends Component {
       capture: true,
     });
 
-    const renderPromise = this.render();
-    this.renderPromise = renderPromise;
-    void renderPromise.then(
-      () => this.onRenderComplete(renderPromise),
-      () => this.onRenderComplete(renderPromise)
-    );
+    if (this.isVisible) this.startRender();
   }
 
   onunload() {
@@ -138,9 +134,24 @@ export class BasicMarkdownRenderer extends Component {
     }
   }
 
+  private startRender() {
+    if (!(this as any)._loaded || !this.isVisible || this.renderPromise) return;
+
+    if (this.renderCapability.settled) {
+      this.renderCapability = new PromiseCapability<void>();
+    }
+
+    const renderPromise = this.render();
+    this.renderPromise = renderPromise;
+    void renderPromise.then(
+      () => this.onRenderComplete(renderPromise),
+      () => this.onRenderComplete(renderPromise)
+    );
+  }
+
   private attachContainer() {
     const { wrapperEl, containerEl } = this;
-    if (!wrapperEl || !this.isVisible || this.renderPending) return;
+    if (!wrapperEl || !this.isVisible || this.renderPending || !this.hasRendered) return;
 
     wrapperEl.append(containerEl);
     if (wrapperEl.style.minHeight) wrapperEl.style.minHeight = '';
@@ -156,11 +167,19 @@ export class BasicMarkdownRenderer extends Component {
           continue;
         }
 
-        this.renderCapability = new PromiseCapability<void>();
-        const renderCapability = this.renderCapability;
-        this.unload();
-        this.load();
-        await (this.renderPromise || renderCapability.promise);
+        if (this.hasRendered) {
+          this.renderCapability = new PromiseCapability<void>();
+          this.hasRendered = false;
+          this.unload();
+        }
+
+        if ((this as any)._loaded) {
+          this.startRender();
+        } else {
+          this.load();
+        }
+
+        await (this.renderPromise || this.renderCapability.promise);
       }
 
       this.attachContainer();
@@ -200,6 +219,7 @@ export class BasicMarkdownRenderer extends Component {
       sourceLineEnd !== this.sourceLineEnd;
     renderCapability.resolve();
     if (!(this.view as any)?._loaded || !(this as any)._loaded) return;
+    this.hasRendered = true;
 
     const { containerEl } = this;
 
@@ -250,16 +270,18 @@ export class BasicMarkdownRenderer extends Component {
     if (this.renderPending) {
       containerEl.detach();
       if (this.isVisible) void this.renderPendingChanges();
-    } else if (containerEl.parentElement !== el) {
-      el.append(containerEl);
+    } else if (this.isVisible) {
+      this.attachContainer();
+    } else {
+      containerEl.detach();
     }
 
     this.mark.unmark();
   }
 
   show() {
-    if (!this.wrapperEl) return;
     this.isVisible = true;
+    if (!this.wrapperEl) return;
 
     if (this.renderPending) {
       void this.renderPendingChanges();
@@ -270,10 +292,12 @@ export class BasicMarkdownRenderer extends Component {
 
   hide() {
     const { containerEl, wrapperEl } = this;
-    if (!wrapperEl) return;
-    wrapperEl.style.minHeight = this.lastRefHeight + 'px';
-    containerEl.detach();
     this.isVisible = false;
+
+    if (wrapperEl) {
+      if (this.lastRefHeight > 0) wrapperEl.style.minHeight = this.lastRefHeight + 'px';
+      containerEl.detach();
+    }
   }
 
   set(
@@ -282,10 +306,9 @@ export class BasicMarkdownRenderer extends Component {
     sourceLineEnd: number = this.sourceLineEnd
   ) {
     if (
-      (this as any)._loaded &&
-      (markdown !== this.markdown ||
-        sourceLineOffset !== this.sourceLineOffset ||
-        sourceLineEnd !== this.sourceLineEnd)
+      markdown !== this.markdown ||
+      sourceLineOffset !== this.sourceLineOffset ||
+      sourceLineEnd !== this.sourceLineEnd
     ) {
       this.markdown = markdown;
       this.sourceLineOffset = sourceLineOffset;
@@ -293,7 +316,7 @@ export class BasicMarkdownRenderer extends Component {
       this.containerEl.dataset.kanbanSourceLineStart = String(sourceLineOffset);
       this.containerEl.dataset.kanbanSourceLineEnd = String(sourceLineEnd);
       this.renderPending = true;
-      if (this.isVisible) void this.renderPendingChanges();
+      if (this.isVisible && (this as any)._loaded) void this.renderPendingChanges();
     }
   }
 
@@ -336,11 +359,23 @@ export const MarkdownRenderer = memo(function MarkdownPreviewRenderer({
 
   const renderer = useRef<BasicMarkdownRenderer>();
   const elRef = useRef<HTMLDivElement>();
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
   const onRenderRef = useRef<(containerEl: HTMLElement) => void>(() => {});
   onRenderRef.current = (containerEl) => {
     colorizeTags(containerEl, getTagColor);
     colorizeDates(containerEl, getDateColor);
+
+    const preview = renderer.current;
+    if (!preview) return;
+    preview.mark.unmark();
+    const query = searchQueryRef.current?.trim();
+    if (query) preview.mark.mark(query);
   };
+
+  const isInitiallyVisible = entityManager?.parent
+    ? entityManager.isVisible
+    : !intersectionContext;
 
   // Reset virtualization if this entity is a managed entity and has changed sort order
   useEffect(() => {
@@ -390,7 +425,7 @@ export const MarkdownRenderer = memo(function MarkdownPreviewRenderer({
 
       renderer.current = preview;
       preview.onRender = (containerEl) => onRenderRef.current(containerEl);
-      preview.migrate(elRef.current, entityManager?.isVisible ?? true);
+      preview.migrate(elRef.current, isInitiallyVisible);
 
       entityManager?.emitter.on('visibility-change', onVisibilityChange);
       return () => entityManager?.emitter.off('visibility-change', onVisibilityChange);
@@ -403,6 +438,7 @@ export const MarkdownRenderer = memo(function MarkdownPreviewRenderer({
       sourceLineEnd
     );
     markdownRenderer.wrapperEl = elRef.current;
+    markdownRenderer.isVisible = isInitiallyVisible;
     markdownRenderer.onRender = (containerEl) => onRenderRef.current(containerEl);
 
     const preview = (renderer.current = view.addChild(markdownRenderer));
@@ -417,7 +453,7 @@ export const MarkdownRenderer = memo(function MarkdownPreviewRenderer({
       renderer.current?.renderCapability.resolve();
       entityManager?.emitter.off('visibility-change', onVisibilityChange);
     };
-  }, [view, entityId, entityManager]);
+  }, [view, entityId, entityManager, isInitiallyVisible]);
 
   // Respond to changes to the markdown string
   useEffect(() => {
@@ -453,9 +489,19 @@ export const MarkdownRenderer = memo(function MarkdownPreviewRenderer({
   useEffect(() => {
     const preview = renderer.current;
     if (elRef.current && preview && preview.wrapperEl !== elRef.current) {
-      preview.migrate(elRef.current, entityManager?.isVisible ?? true);
+      preview.migrate(elRef.current, isInitiallyVisible);
     }
-  }, [entityManager]);
+  }, [entityManager, isInitiallyVisible]);
+
+  useEffect(() => {
+    return () => {
+      const preview = renderer.current;
+      if (!preview) return;
+
+      preview.hide();
+      if (!entityId) view.removeChild(preview);
+    };
+  }, [view, entityId]);
 
   let styles: CSSProperties | undefined = undefined;
   if (!renderer.current && view.previewCache.has(entityId)) {

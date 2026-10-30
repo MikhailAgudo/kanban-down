@@ -20,7 +20,6 @@ import { Board } from './components/types';
 import { getParentWindow } from './dnd/util/getWindow';
 import { gotoNextDailyNote, gotoPrevDailyNote, hasFrontmatterKeyRaw } from './helpers';
 import { bindMarkdownEvents } from './helpers/renderMarkdown';
-import { PromiseQueue } from './helpers/util';
 import { t } from './lang/helpers';
 import KanbanPlugin from './main';
 import { frontmatterKey } from './parsers/common';
@@ -35,7 +34,6 @@ export class KanbanView extends TextFileView implements HoverParent {
   actionButtons: Record<string, HTMLElement> = {};
 
   previewCache: Map<string, BasicMarkdownRenderer>;
-  previewQueue: PromiseQueue;
 
   activeEditor: any;
   viewSettings: KanbanViewSettings = {};
@@ -58,8 +56,6 @@ export class KanbanView extends TextFileView implements HoverParent {
     this.emitter = new EventEmitter();
     this.previewCache = new Map();
 
-    this.previewQueue = new PromiseQueue(() => this.emitter.emit('queueEmpty'));
-
     this.emitter.on('hotkey', ({ commandId }) => {
       switch (commandId) {
         case 'daily-notes:goto-prev': {
@@ -76,33 +72,13 @@ export class KanbanView extends TextFileView implements HoverParent {
     bindMarkdownEvents(this);
   }
 
-  async prerender(board: Board) {
-    board.children.forEach((lane) => {
-      lane.children.forEach((item) => {
-        if (this.previewCache.has(item.id)) return;
-
-        this.previewQueue.add(async () => {
-          const preview = this.addChild(
-            new BasicMarkdownRenderer(
-              this,
-              item.data.title,
-              item.data.sourceLineOffset,
-              (item.data.sourceLineOffset ?? 0) + (item.data.titleRaw.match(/\n/g) || []).length
-            )
-          );
-          this.previewCache.set(item.id, preview);
-          await preview.renderCapability.promise;
-        });
-      });
-    });
-
-    if (this.previewQueue.isRunning) {
-      await new Promise((res) => {
-        this.emitter.once('queueEmpty', res);
-      });
-    }
-
+  prepareBoardView() {
     this.initHeaderButtons();
+  }
+
+  private clearPreviewCache() {
+    this.previewCache.forEach((preview) => this.removeChild(preview));
+    this.previewCache.clear();
   }
 
   validatePreviewCache(board: Board) {
@@ -189,11 +165,8 @@ export class KanbanView extends TextFileView implements HoverParent {
   }
 
   onunload(): void {
+    this.clearPreviewCache();
     super.onunload();
-
-    this.previewQueue.clear();
-    this.previewCache.clear();
-    this.emitter.emit('queueEmpty');
 
     // Remove draggables from render, as the DOM has already detached
     this.plugin.removeView(this);
@@ -236,9 +209,7 @@ export class KanbanView extends TextFileView implements HoverParent {
 
     if (clear) {
       this.activeEditor = null;
-      this.previewQueue.clear();
-      this.previewCache.clear();
-      this.emitter.emit('queueEmpty');
+      this.clearPreviewCache();
       Object.values(this.actionButtons).forEach((b) => b.remove());
       this.actionButtons = {};
     }

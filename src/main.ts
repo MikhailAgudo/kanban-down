@@ -523,13 +523,30 @@ export default class KanbanPlugin extends Plugin {
         kanbanLeaves.forEach((leaf) => {
           (leaf.view as KanbanView).handleRename(file.path, oldPath);
         });
+
+        this.stateManagers.forEach((manager) => {
+          if (
+            manager.file.path !== file.path &&
+            manager.isMetadataChangeRelevant(file.path, oldPath)
+          ) {
+            void manager.onFileMetadataChange();
+          }
+        });
       })
     );
 
-    const notifyFileChange = debounce(
-      (file: TFile) => {
+    const pendingFileChanges = new Map<string, TFile>();
+    const notifyFileChanges = debounce(
+      () => {
+        const files = Array.from(pendingFileChanges.values());
+        pendingFileChanges.clear();
+
         this.stateManagers.forEach((manager) => {
-          if (manager.file.path !== file.path) {
+          const shouldRefresh = files.some(
+            (file) =>
+              manager.file.path !== file.path && manager.isMetadataChangeRelevant(file.path)
+          );
+          if (shouldRefresh) {
             manager.onFileMetadataChange();
           }
         });
@@ -537,6 +554,10 @@ export default class KanbanPlugin extends Plugin {
       2000,
       true
     );
+    const notifyFileChange = (file: TFile) => {
+      pendingFileChanges.set(file.path, file);
+      notifyFileChanges();
+    };
 
     const handleFileChange = (file: TFile) => {
       this.stateManagers.forEach((manager) => {

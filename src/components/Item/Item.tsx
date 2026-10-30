@@ -10,7 +10,7 @@ import {
   useState,
 } from 'preact/compat';
 import { Droppable, useNestedEntityPath } from 'src/dnd/components/Droppable';
-import { DndManagerContext } from 'src/dnd/components/context';
+import { DndManagerContext, EntityManagerContext } from 'src/dnd/components/context';
 import { useDragHandle } from 'src/dnd/managers/DragManager';
 import { frontmatterKey } from 'src/parsers/common';
 
@@ -39,7 +39,44 @@ export interface ItemInnerProps {
   searchQuery?: string;
 }
 
-const ItemInner = memo(function ItemInner({
+const ItemInner = memo(function ItemInner({ item, ...props }: ItemInnerProps) {
+  const entityManager = useContext(EntityManagerContext);
+  const [hasBeenVisible, setHasBeenVisible] = useState(
+    () => item.data.forceEditMode || (entityManager?.isVisible ?? true)
+  );
+
+  useEffect(() => {
+    if (!entityManager) {
+      setHasBeenVisible(true);
+      return;
+    }
+
+    const onVisibilityChange = (isVisible: boolean) => {
+      if (isVisible) setHasBeenVisible(true);
+    };
+
+    entityManager.emitter.on('visibility-change', onVisibilityChange);
+    if (entityManager.isVisible) onVisibilityChange(true);
+
+    return () => entityManager.emitter.off('visibility-change', onVisibilityChange);
+  }, [entityManager]);
+
+  useEffect(() => {
+    if (item.data.forceEditMode) setHasBeenVisible(true);
+  }, [item.data.forceEditMode]);
+
+  if (!hasBeenVisible && !item.data.forceEditMode) {
+    return (
+      <div className={c('item-content-wrapper')} aria-hidden="true">
+        <div className={c('item-title-wrapper')} style={{ minHeight: '2.5em' }} />
+      </div>
+    );
+  }
+
+  return <VisibleItemInner item={item} {...props} />;
+});
+
+const VisibleItemInner = memo(function VisibleItemInner({
   item,
   shouldMarkItemsComplete,
   isMatch,
