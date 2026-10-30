@@ -24,6 +24,15 @@ import { DataTypes } from './types';
 
 const boardScrollTiggers = [DataTypes.Item, DataTypes.Lane];
 const boardAccepts = [DataTypes.Lane];
+const boardWheelScrollScale = 0.61;
+const nativeWheelTargetSelector = `.${c('lane-items')}, input, textarea, select, button, a, [contenteditable]:not([contenteditable="false"]), [role="button"], [role="textbox"], .cm-editor`;
+
+interface BoardWheelGesture {
+  board: HTMLElement;
+  lastEventTime: number;
+  pointerX: number;
+  pointerY: number;
+}
 
 interface KanbanProps {
   stateManager: StateManager;
@@ -51,6 +60,7 @@ export const Kanban = ({ view, stateManager }: KanbanProps) => {
   const isAnythingDragging = useIsAnythingDragging();
 
   const rootRef = useRef<HTMLDivElement>(null);
+  const boardWheelGestureRef = useRef<BoardWheelGesture | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
@@ -94,6 +104,85 @@ export const Kanban = ({ view, stateManager }: KanbanProps) => {
       }
     });
   }, []);
+
+  const resetBoardWheelGesture = useCallback(() => {
+    boardWheelGestureRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (isAnythingDragging) {
+      resetBoardWheelGesture();
+    }
+  }, [isAnythingDragging, resetBoardWheelGesture]);
+
+  const onBoardPointerDown = resetBoardWheelGesture;
+
+  const onBoardWheel = useCallback(
+    (event: WheelEvent) => {
+      const target = event.target as Element | null;
+      const board = event.currentTarget as HTMLElement;
+      let gesture = boardWheelGestureRef.current;
+
+      if (gesture && (gesture.board !== board || event.timeStamp - gesture.lastEventTime > 220)) {
+        gesture = null;
+        boardWheelGestureRef.current = null;
+      }
+
+      const isNativeScrollTarget = target?.closest(nativeWheelTargetSelector);
+      const pointerMoved =
+        gesture &&
+        (Math.abs(event.clientX - gesture.pointerX) > 2 ||
+          Math.abs(event.clientY - gesture.pointerY) > 2);
+
+      if (event.shiftKey || event.deltaX !== 0 || event.deltaY === 0) {
+        resetBoardWheelGesture();
+        return;
+      }
+
+      if (isNativeScrollTarget && (!gesture || pointerMoved)) {
+        resetBoardWheelGesture();
+        return;
+      }
+
+      let scrollDelta = event.deltaY;
+
+      if (event.deltaMode === 1) {
+        const lineHeight = parseFloat(
+          board.ownerDocument.defaultView?.getComputedStyle(board).lineHeight || ''
+        );
+        scrollDelta *= Number.isFinite(lineHeight) ? lineHeight : 16;
+      } else if (event.deltaMode === 2) {
+        scrollDelta *= board.clientHeight;
+      }
+
+      scrollDelta *= boardWheelScrollScale;
+
+      if (!gesture) {
+        gesture = {
+          board,
+          lastEventTime: event.timeStamp,
+          pointerX: event.clientX,
+          pointerY: event.clientY,
+        };
+        boardWheelGestureRef.current = gesture;
+      } else {
+        gesture.lastEventTime = event.timeStamp;
+        gesture.pointerX = event.clientX;
+        gesture.pointerY = event.clientY;
+      }
+
+      const previousScrollLeft = board.scrollLeft;
+      board.scrollTo({
+        left: previousScrollLeft + scrollDelta,
+        behavior: 'instant',
+      });
+
+      if (board.scrollLeft !== previousScrollLeft) {
+        event.preventDefault();
+      }
+    },
+    [resetBoardWheelGesture]
+  );
 
   useEffect(() => {
     const onSearchHotkey = (data: { commandId: string; data: string }) => {
@@ -275,6 +364,8 @@ export const Kanban = ({ view, stateManager }: KanbanProps) => {
                   },
                 ])}
                 triggerTypes={boardScrollTiggers}
+                onWheel={boardView === 'list' ? undefined : onBoardWheel}
+                onPointerDown={onBoardPointerDown}
               >
                 <div>
                   <Sortable axis={axis}>

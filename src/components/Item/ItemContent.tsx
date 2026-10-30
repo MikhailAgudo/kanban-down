@@ -289,6 +289,10 @@ export const ItemContent = memo(function ItemContent({
           entityId={item.id}
           className={c('item-markdown')}
           markdownString={item.data.title}
+          sourceLineOffset={item.data.sourceLineOffset}
+          sourceLineEnd={
+            (item.data.sourceLineOffset ?? 0) + (item.data.titleRaw.match(/\n/g) || []).length
+          }
           searchQuery={searchQuery}
           onPointerUp={onCheckboxContainerClick}
         />

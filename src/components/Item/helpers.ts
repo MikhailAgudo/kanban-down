@@ -113,7 +113,7 @@ export function constructMenuDatePickerOnChange({
       ? buildLinkToDailyNote(stateManager.app, formattedDate)
       : `{${formattedDate}}`;
 
-    let titleRaw = item.data.titleRaw;
+    let titleRaw: string;
 
     if (hasDate) {
       titleRaw = item.data.titleRaw.replace(dateRegEx, `$1${dateTrigger}${wrappedDate}`);
@@ -261,7 +261,7 @@ export function constructMenuTimePickerOnChange({
   const timeRegEx = new RegExp(`(^|\\s)${escapeRegExpStr(timeTrigger as string)}{([^}]+)}`);
 
   return (time: string) => {
-    let titleRaw = item.data.titleRaw;
+    let titleRaw: string;
 
     if (hasTime) {
       titleRaw = item.data.titleRaw.replace(timeRegEx, `$1${timeTrigger}{${time}}`);

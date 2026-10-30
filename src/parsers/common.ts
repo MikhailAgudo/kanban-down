@@ -16,6 +16,10 @@ export interface BaseFormat {
   newItem(content: string, checkChar: string, forceEdit?: boolean): Item;
   updateItemContent(item: Item, content: string): Item;
   boardToMd(board: Board): string;
+  boardToMdWithItemLineOffsets(board: Board): {
+    markdown: string;
+    itemLineOffsets: Map<string, number>;
+  };
   mdToBoard(md: string): Board;
   reparseBoard(): Board;
 }

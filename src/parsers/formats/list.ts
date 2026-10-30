@@ -64,6 +64,7 @@ export function listItemToItemData(stateManager: StateManager, md: string, item:
       ? getNodeContentBoundary(endNode).end
       : endNode.position.end.offset;
   const itemBoundary: ContentBoundary = { start, end };
+  const sourceLineOffset = md.slice(0, itemBoundary.start).split('\n').length - 1;
 
   let itemContent = getStringFromBoundary(md, itemBoundary);
 
@@ -92,6 +93,7 @@ export function listItemToItemData(stateManager: StateManager, md: string, item:
   const itemData: ItemData = {
     titleRaw: removeBlockId(dedentNewLines(replaceBrs(itemContent))),
     blockId: undefined,
+    sourceLineOffset: Math.max(0, sourceLineOffset),
     title: '',
     titleSearch,
     titleSearchRaw: titleSearch,
@@ -337,6 +339,7 @@ export function updateItemContent(stateManager: StateManager, oldItem: Item, new
 
   const ast = parseFragment(stateManager, md);
   const itemData = listItemToItemData(stateManager, md, (ast.children[0] as List).children[0]);
+  itemData.sourceLineOffset = oldItem.data.sourceLineOffset;
   const newItem = update(oldItem, {
     data: {
       $set: itemData,
@@ -404,7 +407,15 @@ function itemToMd(item: Item) {
   return `- [${item.data.checkChar}] ${addBlockId(indentNewLines(item.data.titleRaw), item)}`;
 }
 
-function laneToMd(lane: Lane) {
+function lineBreakCount(value: string) {
+  return (value.match(/\n/g) || []).length;
+}
+
+function laneToMd(
+  lane: Lane,
+  itemLineOffsets?: Map<string, number>,
+  sourceLineOffset: number = 0
+) {
   const lines: string[] = [];
 
   lines.push(`## ${replaceNewLines(laneTitleWithMaxItems(lane.data.title, lane.data.maxItems))}`);
@@ -415,8 +426,12 @@ function laneToMd(lane: Lane) {
     lines.push(completeString);
   }
 
+  let itemLineOffset = sourceLineOffset + lines.length;
   lane.children.forEach((item) => {
-    lines.push(itemToMd(item));
+    const itemMarkdown = itemToMd(item);
+    itemLineOffsets?.set(item.id, itemLineOffset);
+    lines.push(itemMarkdown);
+    itemLineOffset += lineBreakCount(itemMarkdown) + 1;
   });
 
   lines.push('');
@@ -426,12 +441,20 @@ function laneToMd(lane: Lane) {
   return lines.join('\n');
 }
 
-function archiveToMd(archive: Item[]) {
+function archiveToMd(
+  archive: Item[],
+  itemLineOffsets?: Map<string, number>,
+  sourceLineOffset: number = 0
+) {
   if (archive.length) {
     const lines: string[] = [archiveString, '', `## ${t('Archive')}`, ''];
 
+    let itemLineOffset = sourceLineOffset + lines.length;
     archive.forEach((item) => {
-      lines.push(itemToMd(item));
+      const itemMarkdown = itemToMd(item);
+      itemLineOffsets?.set(item.id, itemLineOffset);
+      lines.push(itemMarkdown);
+      itemLineOffset += lineBreakCount(itemMarkdown) + 1;
     });
 
     return lines.join('\n');
@@ -441,11 +464,24 @@ function archiveToMd(archive: Item[]) {
 }
 
 export function boardToMd(board: Board) {
-  const lanes = board.children.reduce((md, lane) => {
-    return md + laneToMd(lane);
-  }, '');
+  return boardToMdWithItemLineOffsets(board).markdown;
+}
 
+export function boardToMdWithItemLineOffsets(board: Board) {
+  const itemLineOffsets = new Map<string, number>();
   const frontmatter = ['---', '', stringifyYaml(board.data.frontmatter), '---', '', ''].join('\n');
 
-  return frontmatter + lanes + archiveToMd(board.data.archive) + settingsToCodeblock(board);
+  let sourceLineOffset = lineBreakCount(frontmatter);
+  let lanes = '';
+
+  board.children.forEach((lane) => {
+    const laneMarkdown = laneToMd(lane, itemLineOffsets, sourceLineOffset);
+    lanes += laneMarkdown;
+    sourceLineOffset += lineBreakCount(laneMarkdown);
+  });
+
+  const archive = archiveToMd(board.data.archive, itemLineOffsets, sourceLineOffset);
+  const markdown = frontmatter + lanes + archive + settingsToCodeblock(board);
+
+  return { markdown, itemLineOffsets };
 }

@@ -95,7 +95,7 @@ export function bindMarkdownEvents(view: KanbanView) {
     if (!link.href || link.href.contains(' ')) return;
     try {
       new URL(link.href);
-    } catch (e) {
+    } catch {
       return;
     }
 

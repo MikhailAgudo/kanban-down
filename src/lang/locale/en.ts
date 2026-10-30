@@ -117,6 +117,15 @@ const en = {
   'Hide card counts in list titles': 'Hide card counts in list titles',
   'When toggled, card counts are hidden from the list title':
     'When toggled, card counts are hidden from the list title',
+  'Card quantity unit': 'Card quantity unit',
+  'Calculate a lane total from cards that begin with a quantity followed by this unit. Leave blank to disable lane totals.':
+    'Calculate a lane total from cards that begin with a quantity followed by this unit. Leave blank to disable lane totals.',
+  'No unit configured': 'No unit configured',
+  'Lane total fraction format': 'Lane total fraction format',
+  'Choose how fractional lane totals are displayed.':
+    'Choose how fractional lane totals are displayed.',
+  'Mixed fractions (3 1/2)': 'Mixed fractions (3 1/2)',
+  'Improper fractions (7/2)': 'Improper fractions (7/2)',
   'Link dates to daily notes': 'Link dates to daily notes',
   'When toggled, dates will link to daily notes. Eg. [[2021-04-26]]':
     'When toggled, dates will link to daily notes. Eg. [[2021-04-26]]',

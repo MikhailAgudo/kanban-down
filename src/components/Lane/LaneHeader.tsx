@@ -23,6 +23,7 @@ interface LaneHeaderProps {
   setIsItemInputVisible?: Dispatch<StateUpdater<EditState>>;
   isCollapsed: boolean;
   toggleIsCollapsed: () => void;
+  quantityTotal?: string;
 }
 
 interface LaneButtonProps {
@@ -87,6 +88,7 @@ export const LaneHeader = memo(function LaneHeader({
   setIsItemInputVisible,
   isCollapsed,
   toggleIsCollapsed,
+  quantityTotal,
 }: LaneHeaderProps) {
   const [editState, setEditState] = useState<EditState>(EditingState.cancel);
   const lanePath = useNestedEntityPath(laneIndex);
@@ -129,11 +131,7 @@ export const LaneHeader = memo(function LaneHeader({
 
   return (
     <>
-      <div
-        // eslint-disable-next-line react/no-unknown-property
-        onDblClick={onDoubleClick}
-        className={c('lane-header-wrapper')}
-      >
+      <div onDblClick={onDoubleClick} className={c('lane-header-wrapper')}>
         <div className={c('lane-grip')} ref={bindHandle}>
           <GripIcon />
         </div>
@@ -150,6 +148,10 @@ export const LaneHeader = memo(function LaneHeader({
           setEditState={setEditState}
           title={lane.data.title}
         />
+
+        {quantityTotal && !isEditing(editState) && (
+          <div className={c('lane-title-total')}>{quantityTotal}</div>
+        )}
 
         <LaneLimitCounter
           editState={editState}

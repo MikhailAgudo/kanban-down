@@ -1,9 +1,78 @@
-import merge from 'deepmerge';
 import update, { Spec } from 'immutability-helper';
 import { isPlainObject } from 'is-plain-object';
 
 import { Nestable, Path } from '../types';
 import { SiblingDirection, getSiblingDirection } from './path';
+
+function cloneMutationValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(cloneMutationValue);
+  }
+
+  if (isPlainObject(value)) {
+    const clone: Record<string, unknown> = {};
+    const objectValue = value as Record<string, unknown>;
+
+    for (const key of Object.keys(value)) {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        continue;
+      }
+
+      Object.defineProperty(clone, key, {
+        configurable: true,
+        enumerable: true,
+        value: cloneMutationValue(objectValue[key]),
+        writable: true,
+      });
+    }
+
+    return clone;
+  }
+
+  return value;
+}
+
+function mergeMutationValues(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>
+): Record<string, unknown> {
+  const merged = cloneMutationValue(target) as Record<string, unknown>;
+
+  for (const key of Object.keys(source)) {
+    if (
+      key === '__proto__' ||
+      key === 'constructor' ||
+      key === 'prototype' ||
+      (key in target && !Object.prototype.hasOwnProperty.call(target, key))
+    ) {
+      continue;
+    }
+
+    const targetValue = target[key];
+    const sourceValue = source[key];
+    let mergedValue: unknown;
+
+    if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
+      mergedValue = [...targetValue, ...sourceValue].map(cloneMutationValue);
+    } else if (isPlainObject(targetValue) && isPlainObject(sourceValue)) {
+      mergedValue = mergeMutationValues(
+        targetValue as Record<string, unknown>,
+        sourceValue as Record<string, unknown>
+      );
+    } else {
+      mergedValue = cloneMutationValue(sourceValue);
+    }
+
+    Object.defineProperty(merged, key, {
+      configurable: true,
+      enumerable: true,
+      value: mergedValue,
+      writable: true,
+    });
+  }
+
+  return merged;
+}
 
 export function getEntityFromPath(root: Nestable, path: Path): Nestable {
   const step = path.length ? path[0] : null;
@@ -102,11 +171,10 @@ export function moveEntity(
     destinationModifier
   );
 
-  const mutation = merge<Spec<Nestable>>(removeMutation, insertMutation, {
-    isMergeableObject: (val) => {
-      return isPlainObject(val) || Array.isArray(val);
-    },
-  });
+  const mutation = mergeMutationValues(
+    removeMutation as unknown as Record<string, unknown>,
+    insertMutation as unknown as Record<string, unknown>
+  ) as unknown as Spec<Nestable>;
 
   const newBoard = update(root, mutation);
 

@@ -1,18 +1,12 @@
-# Obsidian Kanban Plugin
+# Kanban Down
 
-**The Kanban plugin is looking for new maintainers.** Interested? [Read more here.](https://github.com/mgmeyers/obsidian-kanban/blob/main/MAINTAINERS.md)
+Kanban Down is a Markdown-backed Kanban board plugin for [Obsidian](https://obsidian.md/).
 
----
+This is a fork of the [Obsidian Kanban plugin](https://github.com/community-archive/obsidian-kanban), originally created by [mgmeyers](https://github.com/mgmeyers). Thanks for making such a useful, well-loved plugin and for giving this fork a solid foundation.
 
-Create markdown-backed Kanban boards in [Obsidian](https://obsidian.md/)
+## What’s different in this fork
 
-- [Bugs, Issues, & Feature Requests](https://github.com/mgmeyers/obsidian-kanban/issues)
-- [Development Roadmap](https://github.com/mgmeyers/obsidian-kanban/projects/1)
+- Improved card rendering, including support for inline plugins (such as [Inline RPG Tools](https://github.com/MikhailAgudo/inline-rpg-tools)).
+- Horizontal scrolling to make it easier to navigate boards with lots of lanes.
+- Lane totals for inventory tracking: set a unit, put quantities at the start of card titles, and the board adds them up. Fractional totals can be shown as mixed or improper fractions, which is handy for RPG gear and supplies.
 
-![Screen Shot 2021-09-16 at 12.58.22 PM.png](https://github.com/mgmeyers/obsidian-kanban/blob/main/docs/Assets/Screen%20Shot%202021-09-16%20at%2012.58.22%20PM.png)
-
-![Screen Shot 2021-09-16 at 1.10.38 PM.png](https://github.com/mgmeyers/obsidian-kanban/blob/main/docs/Assets/Screen%20Shot%202021-09-16%20at%201.10.38%20PM.png)
-
-## Documentation
-
-Find the plugin documentation here: [Obsidian Kanban Plugin Documentation](https://publish.obsidian.md/kanban/)

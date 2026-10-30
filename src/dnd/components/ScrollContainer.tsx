@@ -12,6 +12,8 @@ interface ScrollContainerProps {
   isStatic?: boolean;
   id: string;
   index?: number;
+  onWheel?: (event: WheelEvent) => void;
+  onPointerDown?: (event: PointerEvent) => void;
 }
 
 export function ScrollContainer({
@@ -20,12 +22,18 @@ export function ScrollContainer({
   triggerTypes,
   isStatic,
   id,
-  index,
+  onWheel,
+  onPointerDown,
 }: ScrollContainerProps) {
-  const { setRef, scrollRef } = useStoredScrollState(id, index);
+  const { setRef, scrollRef } = useStoredScrollState(id);
 
   return (
-    <div ref={setRef} className={classcat([className, c('scroll-container')])}>
+    <div
+      ref={setRef}
+      className={classcat([className, c('scroll-container')])}
+      onWheel={onWheel}
+      onPointerDown={onPointerDown}
+    >
       {isStatic ? (
         children
       ) : (

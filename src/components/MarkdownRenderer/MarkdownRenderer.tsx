@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
 import classcat from 'classcat';
 import Mark from 'mark.js';
 import moment from 'moment';
@@ -17,6 +16,8 @@ import { DateColor, TagColor } from '../types';
 interface MarkdownRendererProps extends HTMLAttributes<HTMLDivElement> {
   className?: string;
   markdownString: string;
+  sourceLineOffset?: number;
+  sourceLineEnd?: number;
   searchQuery?: string;
   entityId?: string;
 }
@@ -59,9 +60,14 @@ export class BasicMarkdownRenderer extends Component {
   containerEl: HTMLElement;
   wrapperEl: HTMLElement;
   renderCapability: PromiseCapability;
-  observer: ResizeObserver;
+  observer: ResizeObserver | null = null;
   isVisible: boolean = false;
+  renderPending: boolean = false;
+  onRender?: (containerEl: HTMLElement) => void;
   mark: Mark;
+
+  private renderPromise: Promise<void> | null = null;
+  private renderTask: Promise<void> | null = null;
 
   lastWidth = -1;
   lastHeight = -1;
@@ -70,33 +76,129 @@ export class BasicMarkdownRenderer extends Component {
 
   constructor(
     public view: KanbanView,
-    public markdown: string
+    public markdown: string,
+    public sourceLineOffset: number = 0,
+    public sourceLineEnd: number = sourceLineOffset
   ) {
     super();
     this.containerEl = createDiv(
       'markdown-preview-view markdown-rendered ' + c('markdown-preview-view')
     );
+    this.containerEl.dataset.kanbanSourceLineStart = String(sourceLineOffset);
+    this.containerEl.dataset.kanbanSourceLineEnd = String(sourceLineEnd);
     this.mark = new Mark(this.containerEl);
     this.renderCapability = new PromiseCapability<void>();
   }
 
   onload() {
-    this.render();
+    this.containerEl.addEventListener('click', this.onTaskListCheckboxClick, { capture: true });
+    this.containerEl.addEventListener('contextmenu', this.onTaskListCheckboxContextMenu, {
+      capture: true,
+    });
+
+    const renderPromise = this.render();
+    this.renderPromise = renderPromise;
+    void renderPromise.then(
+      () => this.onRenderComplete(renderPromise),
+      () => this.onRenderComplete(renderPromise)
+    );
   }
 
-  // eslint-disable-next-line react/require-render-return
+  onunload() {
+    this.observer?.disconnect();
+    this.observer = null;
+    this.containerEl.removeEventListener('click', this.onTaskListCheckboxClick, true);
+    this.containerEl.removeEventListener('contextmenu', this.onTaskListCheckboxContextMenu, true);
+    super.onunload();
+  }
+
+  private onTaskListCheckboxClick = (evt: MouseEvent) => {
+    const { targetNode } = evt;
+    if (
+      targetNode.instanceOf(HTMLElement) &&
+      targetNode.hasClass('task-list-item-checkbox') &&
+      !targetNode.closest('.markdown-embed')
+    ) {
+      evt.preventDefault();
+      evt.stopPropagation();
+    }
+  };
+
+  private onTaskListCheckboxContextMenu = (evt: MouseEvent) => {
+    const { targetNode } = evt;
+    if (targetNode.instanceOf(HTMLElement) && targetNode.hasClass('task-list-item-checkbox')) {
+      evt.preventDefault();
+      evt.stopPropagation();
+    }
+  };
+
+  private onRenderComplete(promise: Promise<void>) {
+    if (this.renderPromise === promise) {
+      this.renderPromise = null;
+    }
+  }
+
+  private attachContainer() {
+    const { wrapperEl, containerEl } = this;
+    if (!wrapperEl || !this.isVisible || this.renderPending) return;
+
+    wrapperEl.append(containerEl);
+    if (wrapperEl.style.minHeight) wrapperEl.style.minHeight = '';
+  }
+
+  private renderPendingChanges(): Promise<void> {
+    if (this.renderTask) return this.renderTask;
+
+    const renderTask = (async () => {
+      while (this.renderPending && this.isVisible) {
+        if (this.renderPromise) {
+          await this.renderPromise;
+          continue;
+        }
+
+        this.renderCapability = new PromiseCapability<void>();
+        const renderCapability = this.renderCapability;
+        this.unload();
+        this.load();
+        await (this.renderPromise || renderCapability.promise);
+      }
+
+      this.attachContainer();
+    })();
+
+    this.renderTask = renderTask;
+    void renderTask.then(
+      () => {
+        if (this.renderTask === renderTask) this.renderTask = null;
+      },
+      () => {
+        if (this.renderTask === renderTask) this.renderTask = null;
+      }
+    );
+    return renderTask;
+  }
+
   async render() {
+    const markdown = this.markdown;
+    const sourceLineOffset = this.sourceLineOffset;
+    const sourceLineEnd = this.sourceLineEnd;
+    const renderCapability = this.renderCapability;
+
     this.containerEl.empty();
 
     await ObsidianRenderer.render(
       this.view.app,
-      this.markdown,
+      markdown,
       this.containerEl,
       this.view.file.path,
       this
     );
 
-    this.renderCapability.resolve();
+    this.renderPending =
+      markdown !== this.markdown ||
+      sourceLineOffset !== this.sourceLineOffset ||
+      sourceLineEnd !== this.sourceLineEnd;
+    renderCapability.resolve();
     if (!(this.view as any)?._loaded || !(this as any)._loaded) return;
 
     const { containerEl } = this;
@@ -104,7 +206,7 @@ export class BasicMarkdownRenderer extends Component {
     this.resolveLinks();
     applyCheckboxIndexes(containerEl);
 
-    this.observer = new ResizeObserver((entries) => {
+    const observer = (this.observer = new ResizeObserver((entries) => {
       if (!entries.length) return;
 
       const entry = entries.first().contentBoxSize[0];
@@ -120,53 +222,35 @@ export class BasicMarkdownRenderer extends Component {
 
       this.lastWidth = entry.inlineSize;
       this.lastHeight = entry.blockSize;
-    });
+    }));
 
     containerEl.win.setTimeout(() => {
-      this.observer.observe(containerEl, { box: 'border-box' });
+      if (this.observer === observer && (this as any)._loaded) {
+        observer.observe(containerEl, { box: 'border-box' });
+      }
     });
 
-    containerEl.addEventListener(
-      'click',
-      (evt) => {
-        const { targetNode } = evt;
-        if (
-          targetNode.instanceOf(HTMLElement) &&
-          targetNode.hasClass('task-list-item-checkbox') &&
-          !targetNode.closest('.markdown-embed')
-        ) {
-          evt.preventDefault();
-          evt.stopPropagation();
-        }
-      },
-      { capture: true }
-    );
-
-    containerEl.addEventListener(
-      'contextmenu',
-      (evt) => {
-        const { targetNode } = evt;
-        if (targetNode.instanceOf(HTMLElement) && targetNode.hasClass('task-list-item-checkbox')) {
-          evt.preventDefault();
-          evt.stopPropagation();
-        }
-      },
-      { capture: true }
-    );
+    this.onRender?.(containerEl);
   }
 
-  migrate(el: HTMLElement) {
+  migrate(el: HTMLElement, isVisible: boolean = this.isVisible) {
     const { lastRefHeight, lastRefWidth, containerEl } = this;
     this.wrapperEl = el;
+    this.isVisible = isVisible;
     if (lastRefHeight > 0) {
       el.style.width = `${lastRefWidth}px`;
       el.style.height = `${lastRefHeight}px`;
+      if (this.renderPending) el.style.minHeight = `${lastRefHeight}px`;
       el.win.setTimeout(() => {
         el.style.width = '';
         el.style.height = '';
       }, 50);
     }
-    if (containerEl.parentElement !== el) {
+
+    if (this.renderPending) {
+      containerEl.detach();
+      if (this.isVisible) void this.renderPendingChanges();
+    } else if (containerEl.parentElement !== el) {
       el.append(containerEl);
     }
 
@@ -174,11 +258,14 @@ export class BasicMarkdownRenderer extends Component {
   }
 
   show() {
-    const { wrapperEl, containerEl } = this;
-    if (!wrapperEl) return;
-    wrapperEl.append(containerEl);
-    if (wrapperEl.style.minHeight) wrapperEl.style.minHeight = '';
+    if (!this.wrapperEl) return;
     this.isVisible = true;
+
+    if (this.renderPending) {
+      void this.renderPendingChanges();
+    } else {
+      this.attachContainer();
+    }
   }
 
   hide() {
@@ -189,12 +276,24 @@ export class BasicMarkdownRenderer extends Component {
     this.isVisible = false;
   }
 
-  set(markdown: string) {
-    if ((this as any)._loaded) {
+  set(
+    markdown: string,
+    sourceLineOffset: number = this.sourceLineOffset,
+    sourceLineEnd: number = this.sourceLineEnd
+  ) {
+    if (
+      (this as any)._loaded &&
+      (markdown !== this.markdown ||
+        sourceLineOffset !== this.sourceLineOffset ||
+        sourceLineEnd !== this.sourceLineEnd)
+    ) {
       this.markdown = markdown;
-      this.renderCapability = new PromiseCapability<void>();
-      this.unload();
-      this.load();
+      this.sourceLineOffset = sourceLineOffset;
+      this.sourceLineEnd = sourceLineEnd;
+      this.containerEl.dataset.kanbanSourceLineStart = String(sourceLineOffset);
+      this.containerEl.dataset.kanbanSourceLineEnd = String(sourceLineEnd);
+      this.renderPending = true;
+      if (this.isVisible) void this.renderPendingChanges();
     }
   }
 
@@ -222,6 +321,8 @@ export const MarkdownRenderer = memo(function MarkdownPreviewRenderer({
   entityId,
   className,
   markdownString,
+  sourceLineOffset = 0,
+  sourceLineEnd = sourceLineOffset,
   searchQuery,
   ...divProps
 }: MarkdownRendererProps) {
@@ -235,6 +336,11 @@ export const MarkdownRenderer = memo(function MarkdownPreviewRenderer({
 
   const renderer = useRef<BasicMarkdownRenderer>();
   const elRef = useRef<HTMLDivElement>();
+  const onRenderRef = useRef<(containerEl: HTMLElement) => void>(() => {});
+  onRenderRef.current = (containerEl) => {
+    colorizeTags(containerEl, getTagColor);
+    colorizeDates(containerEl, getDateColor);
+  };
 
   // Reset virtualization if this entity is a managed entity and has changed sort order
   useEffect(() => {
@@ -283,22 +389,27 @@ export const MarkdownRenderer = memo(function MarkdownPreviewRenderer({
       const preview = view.previewCache.get(entityId);
 
       renderer.current = preview;
-      preview.migrate(elRef.current);
+      preview.onRender = (containerEl) => onRenderRef.current(containerEl);
+      preview.migrate(elRef.current, entityManager?.isVisible ?? true);
 
       entityManager?.emitter.on('visibility-change', onVisibilityChange);
       return () => entityManager?.emitter.off('visibility-change', onVisibilityChange);
     }
 
-    const markdownRenderer = new BasicMarkdownRenderer(view, markdownString);
+    const markdownRenderer = new BasicMarkdownRenderer(
+      view,
+      markdownString,
+      sourceLineOffset,
+      sourceLineEnd
+    );
     markdownRenderer.wrapperEl = elRef.current;
+    markdownRenderer.onRender = (containerEl) => onRenderRef.current(containerEl);
 
     const preview = (renderer.current = view.addChild(markdownRenderer));
     if (entityId) view.previewCache.set(entityId, preview);
 
     elRef.current.empty();
     elRef.current.append(preview.containerEl);
-    colorizeTags(elRef.current, getTagColor);
-    colorizeDates(elRef.current, getDateColor);
 
     entityManager?.emitter.on('visibility-change', onVisibilityChange);
 
@@ -311,21 +422,23 @@ export const MarkdownRenderer = memo(function MarkdownPreviewRenderer({
   // Respond to changes to the markdown string
   useEffect(() => {
     const preview = renderer.current;
-    if (!preview || markdownString === preview.markdown) return;
+    if (
+      !preview ||
+      (markdownString === preview.markdown &&
+        sourceLineOffset === preview.sourceLineOffset &&
+        sourceLineEnd === preview.sourceLineEnd)
+    )
+      return;
 
     preview.renderCapability.resolve();
 
-    preview.set(markdownString);
-    preview.renderCapability.promise.then(() => {
-      colorizeTags(elRef.current, getTagColor);
-      colorizeDates(elRef.current, getDateColor);
-    });
-  }, [markdownString]);
+    preview.set(markdownString, sourceLineOffset, sourceLineEnd);
+  }, [markdownString, sourceLineOffset, sourceLineEnd]);
 
   useEffect(() => {
     if (!renderer.current) return;
-    colorizeTags(elRef.current, getTagColor);
-    colorizeDates(elRef.current, getDateColor);
+    colorizeTags(renderer.current.containerEl, getTagColor);
+    colorizeDates(renderer.current.containerEl, getDateColor);
   }, [getTagColor, getDateColor]);
 
   useEffect(() => {
@@ -340,9 +453,9 @@ export const MarkdownRenderer = memo(function MarkdownPreviewRenderer({
   useEffect(() => {
     const preview = renderer.current;
     if (elRef.current && preview && preview.wrapperEl !== elRef.current) {
-      preview.migrate(elRef.current);
+      preview.migrate(elRef.current, entityManager?.isVisible ?? true);
     }
-  }, []);
+  }, [entityManager]);
 
   let styles: CSSProperties | undefined = undefined;
   if (!renderer.current && view.previewCache.has(entityId)) {

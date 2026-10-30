@@ -201,8 +201,19 @@ export class ScrollManager {
   }
 
   onScroll = () => {
-    if (this.activeScroll.size === 0) {
-      this.scrollState = getElementScrollOffsets(this.scrollEl);
+    if (this.activeScroll.size !== 0) return;
+
+    const previousScrollState = this.scrollState;
+    const nextScrollState = getElementScrollOffsets(this.scrollEl);
+    const didScrollabilityChange = sides.some(
+      (side) =>
+        this.isDoneScrolling(side, previousScrollState) !==
+        this.isDoneScrolling(side, nextScrollState)
+    );
+
+    this.scrollState = nextScrollState;
+
+    if (didScrollabilityChange) {
       this.handleEntityRegistration();
     }
   };
@@ -228,16 +239,16 @@ export class ScrollManager {
     this.activeScroll.delete(scrollEntitySide);
   };
 
-  isDoneScrolling(side: Side) {
+  isDoneScrolling(side: Side, scrollState: ScrollState = this.scrollState) {
     switch (side) {
       case 'top':
-        return this.scrollState.y === 0;
+        return scrollState.y === 0;
       case 'right':
-        return this.scrollState.x === this.scrollState.maxX;
+        return scrollState.x === scrollState.maxX;
       case 'bottom':
-        return this.scrollState.y === this.scrollState.maxY;
+        return scrollState.y === scrollState.maxY;
       case 'left':
-        return this.scrollState.x === 0;
+        return scrollState.x === 0;
     }
   }
 

@@ -24,6 +24,7 @@ export class StateManager {
   app: App;
   state: Board;
   file: TFile;
+  boardFileReadVersion = 0;
 
   parser: BaseFormat;
 
@@ -104,13 +105,57 @@ export class StateManager {
     const view = this.getAView();
 
     if (view) {
-      const fileStr = this.parser.boardToMd(this.state);
-      view.requestSaveToDisk(fileStr);
+      const { markdown, itemLineOffsets } = this.parser.boardToMdWithItemLineOffsets(
+        this.state
+      );
+      this.applyItemLineOffsets(itemLineOffsets);
+      view.requestSaveToDisk(markdown);
 
       this.viewSet.forEach((view) => {
-        view.data = fileStr;
+        view.data = markdown;
       });
     }
+  }
+
+  private applyItemLineOffsets(itemLineOffsets: Map<string, number>) {
+    const updateItem = (item: Item) => {
+      const sourceLineOffset = itemLineOffsets.get(item.id);
+      if (sourceLineOffset === undefined || item.data.sourceLineOffset === sourceLineOffset) {
+        return item;
+      }
+
+      return {
+        ...item,
+        data: {
+          ...item.data,
+          sourceLineOffset,
+        },
+      };
+    };
+
+    const children = this.state.children.map((lane) => {
+      const items = lane.children.map(updateItem);
+      return items.every((item, index) => item === lane.children[index])
+        ? lane
+        : { ...lane, children: items };
+    });
+    const archive = this.state.data.archive.map(updateItem);
+
+    if (
+      children.every((lane, index) => lane === this.state.children[index]) &&
+      archive.every((item, index) => item === this.state.data.archive[index])
+    ) {
+      return;
+    }
+
+    this.state = {
+      ...this.state,
+      children,
+      data: {
+        ...this.state.data,
+        archive,
+      },
+    };
   }
 
   softRefresh() {
@@ -353,6 +398,28 @@ export class StateManager {
     this.reparseBoardFromMd();
   }
 
+  async onFileContentChange() {
+    const readVersion = ++this.boardFileReadVersion;
+
+    try {
+      const data = await this.app.vault.read(this.file);
+      if (readVersion !== this.boardFileReadVersion) return;
+
+      const view = this.getAView();
+      if (!view || view.data === data) return;
+
+      this.viewSet.forEach((view) => {
+        view.data = data;
+      });
+
+      this.setState(this.getParsedBoard(data), false);
+    } catch (e) {
+      if (readVersion !== this.boardFileReadVersion) return;
+      console.error(e);
+      this.setError(e);
+    }
+  }
+
   async reparseBoardFromMd() {
     try {
       this.setState(this.getParsedBoard(this.getAView().data), false);
@@ -409,7 +476,7 @@ export class StateManager {
           data: {
             archive: {
               $push: shouldAppendArchiveDate
-                ? await Promise.all(archived.map((item) => appendArchiveDate(item)))
+                ? archived.map((item) => appendArchiveDate(item))
                 : archived,
             },
           },

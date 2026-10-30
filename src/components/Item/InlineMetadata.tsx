@@ -45,7 +45,7 @@ export function InlineMetadata({ item, stateManager }: InlineMetadataProps) {
         const isDate = !!val?.ts;
         const classNameSlug = key.replace(/[^a-zA-Z0-9_]/g, '-');
 
-        let label = '';
+        let label: string;
 
         if (explicitLabel && !isTaskMetadata) {
           label = explicitLabel;

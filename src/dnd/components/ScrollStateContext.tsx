@@ -13,25 +13,30 @@ export function DndScrollState({ children }: WithChildren) {
   return <ScrollStateContext.Provider value={manager}>{children}</ScrollStateContext.Provider>;
 }
 
-export function useStoredScrollState(id: string, index: number | undefined) {
+export function useStoredScrollState(id: string) {
   const scopeId = Preact.useContext(ScopeIdContext);
   const scrollRef = Preact.useRef<HTMLDivElement>(null);
   const scrollStateManager = Preact.useContext(ScrollStateContext);
 
-  const setRef = (el: HTMLDivElement) => {
-    scrollRef.current = el;
+  const setRef = Preact.useCallback(
+    (el: HTMLDivElement | null) => {
+      scrollRef.current = el;
 
-    if (scrollRef.current) {
-      el.win.requestAnimationFrame(() => {
-        const state = scrollStateManager.getScrollState(id);
+      if (el) {
+        el.win.requestAnimationFrame(() => {
+          if (scrollRef.current !== el) return;
 
-        if (state && (state.x !== 0 || state.y !== 0)) {
-          scrollRef.current.scrollLeft = state.x;
-          scrollRef.current.scrollTop = state.y;
-        }
-      });
-    }
-  };
+          const state = scrollStateManager.getScrollState(id);
+
+          if (state && (state.x !== 0 || state.y !== 0)) {
+            if (el.scrollLeft !== state.x) el.scrollLeft = state.x;
+            if (el.scrollTop !== state.y) el.scrollTop = state.y;
+          }
+        });
+      }
+    },
+    [id, scrollStateManager]
+  );
 
   Preact.useEffect(() => {
     const el = scrollRef.current;
@@ -51,8 +56,9 @@ export function useStoredScrollState(id: string, index: number | undefined) {
 
     return () => {
       el.removeEventListener('scroll', onScroll);
+      onScroll.cancel();
     };
-  }, [scrollStateManager, id, index]);
+  }, [scrollStateManager, scopeId, id]);
 
   return { setRef, scrollRef };
 }

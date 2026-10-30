@@ -423,7 +423,8 @@ button.kanban-plugin__lane-action-add {
   }
 
   .kanban-plugin__lane-title-count,
-  .kanban-plugin__lane-title-text {
+  .kanban-plugin__lane-title-text,
+  .kanban-plugin__lane-title-total {
     transform: rotate(180deg);
   }
 
@@ -491,6 +492,15 @@ div.kanban-plugin__lane-title-count {
   font-size: 13px;
   line-height: 1;
   padding: 4px;
+}
+
+.kanban-plugin__lane-title-total {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px;
+  white-space: nowrap;
 }
 
 div.kanban-plugin__lane-title-count.wip-exceeded {
@@ -1683,16 +1693,13 @@ body:not(.native-scrollbars) .kanban-plugin__scroll-container::-webkit-scrollbar
   background-clip: content-box;
 }
 
-.kanban-plugin__scroll-container {
-  will-change: transform;
-}
-
 .kanban-plugin__scroll-container.kanban-plugin__horizontal {
   overflow-y: hidden;
   overflow-x: auto;
 }
 
 .kanban-plugin__scroll-container.kanban-plugin__vertical {
+  will-change: transform;
   overflow-y: auto;
   overflow-x: hidden;
 }

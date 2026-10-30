@@ -56,8 +56,8 @@ export const combine = {
 
 export const timings = {
   outOfTheWay: 200,
-  minDropTime: 330,
-  maxDropTime: 550,
+  minDropTime: 66,
+  maxDropTime: 110,
 };
 
 const outOfTheWayTiming: string = `${timings.outOfTheWay}ms ${curves.outOfTheWay}`;
@@ -115,8 +115,8 @@ export function getDropDuration({
   }
 
   // * range from:
-  // 0px = 0.33s
-  // 1500px and over = 0.55s
+  // 0px = 0.066s
+  // 1500px and over = 0.11s
   // * If reason === 'CANCEL' then speeding up the animation
   // * round to 2 decimal points
 

@@ -4,13 +4,14 @@
 
 # npm
 node_modules
-package-lock.json
+yarn.lock
+yarn-error.log
+yarn-debug.log
 
 # build
 .DS_Store
 *.js.map
 .env
-yarn*
 dist
 test-vault/
 main.js

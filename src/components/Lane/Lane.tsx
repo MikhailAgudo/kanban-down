@@ -12,6 +12,8 @@ import { ScrollContainer } from 'src/dnd/components/ScrollContainer';
 import { SortPlaceholder } from 'src/dnd/components/SortPlaceholder';
 import { Sortable, StaticSortable } from 'src/dnd/components/Sortable';
 import { useDragHandle } from 'src/dnd/managers/DragManager';
+import { formatRational } from 'src/helpers/rational';
+import { sumLaneQuantities } from 'src/models/laneTotals';
 import { frontmatterKey } from 'src/parsers/common';
 import { getTaskStatusDone } from 'src/parsers/helpers/inlineMetadata';
 
@@ -50,6 +52,12 @@ function DraggableLaneRaw({
   const laneWidth = stateManager.useSetting('lane-width');
   const fullWidth = boardView === 'list' && stateManager.useSetting('full-list-lane-width');
   const insertionMethod = stateManager.useSetting('new-card-insertion-method');
+  const quantityUnit = stateManager.useSetting('card-quantity-unit');
+  const quantityFractionFormat = stateManager.useSetting('card-quantity-fraction-format');
+  const quantityTotal = quantityUnit ? sumLaneQuantities(lane.children, quantityUnit) : null;
+  const formattedQuantityTotal = quantityTotal
+    ? `${formatRational(quantityTotal, quantityFractionFormat || 'mixed')} ${quantityUnit.trim()}`
+    : null;
   const laneStyles = useMemo(
     () =>
       !(isCollapsed && collapseDir === 'horizontal') && (fullWidth || laneWidth)
@@ -164,6 +172,7 @@ function DraggableLaneRaw({
               setIsItemInputVisible={isCompactPrepend ? setEditState : undefined}
               isCollapsed={isCollapsed}
               toggleIsCollapsed={toggleIsCollapsed}
+              quantityTotal={formattedQuantityTotal}
             />
 
             {!search?.query && !isCollapsed && shouldPrepend && (

@@ -48,6 +48,7 @@ import { cleanUpTagSortSettings, renderTagSortSettings } from './settings/TagSor
 const numberRegEx = /^\d+(?:\.\d+)?$/;
 
 export type KanbanFormat = 'basic' | 'board' | 'table' | 'list';
+export type CardQuantityFractionFormat = 'mixed' | 'improper';
 
 export interface KanbanSettings {
   [frontmatterKey]?: KanbanFormat;
@@ -61,6 +62,8 @@ export interface KanbanSettings {
   'date-picker-week-start'?: number;
   'date-time-display-format'?: string;
   'date-trigger'?: string;
+  'card-quantity-fraction-format'?: CardQuantityFractionFormat;
+  'card-quantity-unit'?: string;
   'full-list-lane-width'?: boolean;
   'hide-card-count'?: boolean;
   'inline-metadata-position'?: 'body' | 'footer' | 'metadata-table';
@@ -109,6 +112,8 @@ export const settingKeyLookup: Set<keyof KanbanSettings> = new Set([
   'date-picker-week-start',
   'date-time-display-format',
   'date-trigger',
+  'card-quantity-fraction-format',
+  'card-quantity-unit',
   'full-list-lane-width',
   'hide-card-count',
   'inline-metadata-position',
@@ -327,6 +332,85 @@ export class SettingsManager {
 
                 this.applySettingsUpdate({
                   $unset: ['hide-card-count'],
+                });
+              });
+          });
+      });
+
+    new Setting(contentEl)
+      .setName(t('Card quantity unit'))
+      .setDesc(
+        t(
+          'Calculate a lane total from cards that begin with a quantity followed by this unit. Leave blank to disable lane totals.'
+        )
+      )
+      .then((setting) => {
+        let unitInput: HTMLInputElement;
+
+        setting
+          .addText((text) => {
+            unitInput = text.inputEl;
+            const [value, globalValue] = this.getSetting('card-quantity-unit', local);
+
+            text.setValue(typeof value === 'string' ? value : '');
+            text.setPlaceholder(
+              typeof globalValue === 'string' && globalValue ? globalValue : t('No unit configured')
+            );
+            text.onChange((newValue) => {
+              this.applySettingsUpdate({
+                'card-quantity-unit': {
+                  $set: newValue.trim(),
+                },
+              });
+            });
+          })
+          .addExtraButton((button) => {
+            button
+              .setIcon('lucide-rotate-ccw')
+              .setTooltip(t('Reset to default'))
+              .onClick(() => {
+                const [, globalValue] = this.getSetting('card-quantity-unit', local);
+                unitInput.value = typeof globalValue === 'string' ? globalValue : '';
+
+                this.applySettingsUpdate({
+                  $unset: ['card-quantity-unit'],
+                });
+              });
+          });
+      });
+
+    new Setting(contentEl)
+      .setName(t('Lane total fraction format'))
+      .setDesc(t('Choose how fractional lane totals are displayed.'))
+      .then((setting) => {
+        let formatDropdown: DropdownComponent;
+
+        setting
+          .addDropdown((dropdown) => {
+            formatDropdown = dropdown;
+            dropdown.addOption('mixed', t('Mixed fractions (3 1/2)'));
+            dropdown.addOption('improper', t('Improper fractions (7/2)'));
+
+            const [value, globalValue] = this.getSetting('card-quantity-fraction-format', local);
+            dropdown.setValue((value as string) || (globalValue as string) || 'mixed');
+            dropdown.onChange((newValue) => {
+              this.applySettingsUpdate({
+                'card-quantity-fraction-format': {
+                  $set: newValue as CardQuantityFractionFormat,
+                },
+              });
+            });
+          })
+          .addExtraButton((button) => {
+            button
+              .setIcon('lucide-rotate-ccw')
+              .setTooltip(t('Reset to default'))
+              .onClick(() => {
+                const [, globalValue] = this.getSetting('card-quantity-fraction-format', local);
+                formatDropdown.setValue((globalValue as string) || 'mixed');
+
+                this.applySettingsUpdate({
+                  $unset: ['card-quantity-fraction-format'],
                 });
               });
           });

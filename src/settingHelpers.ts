@@ -1,4 +1,4 @@
-import Choices, { Choices as IChoices } from 'choices.js';
+import Choices, { type Choice } from 'choices.js';
 import update from 'immutability-helper';
 import { App, Setting, TFile, TFolder, Vault } from 'obsidian';
 
@@ -11,7 +11,7 @@ export const defaultTimeTrigger = '@@';
 export const defaultMetadataPosition = 'body';
 
 export function getFolderChoices(app: App) {
-  const folderList: IChoices.Choice[] = [];
+  const folderList: Choice[] = [];
 
   Vault.recurseChildren(app.vault.getRoot(), (f) => {
     if (f instanceof TFolder) {
@@ -28,7 +28,7 @@ export function getFolderChoices(app: App) {
 }
 
 export function getTemplateChoices(app: App, folderStr?: string) {
-  const fileList: IChoices.Choice[] = [];
+  const fileList: Choice[] = [];
 
   let folder = folderStr ? app.vault.getAbstractFileByPath(folderStr) : null;
 
@@ -70,7 +70,7 @@ export function getListOptions(app: App) {
 }
 
 interface CreateSearchSelectParams {
-  choices: IChoices.Choice[];
+  choices: Choice[];
   key: keyof KanbanSettings;
   warningText?: string;
   local: boolean;

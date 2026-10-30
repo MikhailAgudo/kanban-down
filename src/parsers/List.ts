@@ -9,6 +9,7 @@ import { BaseFormat } from './common';
 import {
   astToUnhydratedBoard,
   boardToMd,
+  boardToMdWithItemLineOffsets as createBoardMarkdownWithItemLineOffsets,
   newItem,
   reparseBoard,
   updateItemContent,
@@ -18,6 +19,7 @@ import { parseMarkdown } from './parseMarkdown';
 
 const generatedKeys: Array<string | number> = [
   'id',
+  'sourceLineOffset',
   'date',
   'time',
   'titleSearch',
@@ -42,6 +44,10 @@ export class ListFormat implements BaseFormat {
 
   boardToMd(board: Board) {
     return boardToMd(board);
+  }
+
+  boardToMdWithItemLineOffsets(board: Board) {
+    return createBoardMarkdownWithItemLineOffsets(board);
   }
 
   mdToBoard(md: string) {

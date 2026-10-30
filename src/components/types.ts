@@ -79,6 +79,7 @@ export interface ItemMetadata {
 
 export interface ItemData {
   blockId?: string;
+  sourceLineOffset?: number;
   checked: boolean;
   checkChar: string;
   title: string;
